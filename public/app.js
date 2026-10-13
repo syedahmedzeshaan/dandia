@@ -67,6 +67,21 @@ $('#verify-button').addEventListener('click', async () => {
 });
 
 if (location.protocol !== 'file:') {
+  // Keep the free Render service awake while an admin has this page open.
+  // A browser-side heartbeat avoids an always-on external monitor; Render can
+  // still spin down after 15 minutes when every admin tab is closed.
+  let lastHealthPing = 0;
+  const pingHealth = () => {
+    const now = Date.now();
+    if (now - lastHealthPing < 60_000) return;
+    lastHealthPing = now;
+    fetch('/api/health', { cache: 'no-store' }).catch(() => {});
+  };
+  window.setInterval(pingHealth, 8 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pingHealth();
+  });
+
   fetch('/api/config').then((response) => response.ok ? response.json() : null).then((data) => {
     if (data?.maxUploadSizeMb) { uploadLimit = data.maxUploadSizeMb; $('#max-size').textContent = uploadLimit; }
     $('#save-button').disabled = !data?.driveConfigured;
