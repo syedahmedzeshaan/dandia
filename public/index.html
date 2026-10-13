@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f5f7">
+  <title>MVSREC Dandiya — Registration Admin</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="brand-mark" aria-hidden="true">D</div>
+      <div><p class="eyebrow">MVSREC · EVENT ADMIN</p><h1>MVSREC Dandiya</h1><p class="subtitle">Registration and payment management</p></div>
+    </header>
+    <section class="search-panel" aria-labelledby="search-title">
+      <div class="section-heading"><div><p class="eyebrow">LOOKUP</p><h2 id="search-title">Find a registration</h2></div></div>
+      <form id="search-form" class="search-form">
+        <label for="registration-id">Pass No</label>
+        <div class="search-row"><input id="registration-id" name="registrationId" placeholder="Enter Pass No" autocomplete="off" required><button id="search-button" type="submit">Search</button></div>
+      </form>
+      <p id="notice" class="notice" role="status" aria-live="polite"></p>
+      <a id="drive-connect" class="drive-connect" href="/auth/google" hidden>Connect Google Drive</a>
+    </section>
+    <section id="record" class="record-grid" hidden>
+      <article class="card details-card">
+        <div class="section-heading"><div><p class="eyebrow">REGISTRATION DETAILS</p><h2 id="student-name">Student</h2></div><span id="registration-badge" class="id-badge"></span></div>
+        <dl class="details-list">
+          <div><dt>Pass No</dt><dd id="record-pass-no">—</dd></div><div><dt>Roll number</dt><dd id="roll-number">—</dd></div><div><dt>Branch</dt><dd id="branch">—</dd></div>
+          <div><dt>Section</dt><dd id="section">—</dd></div><div><dt>Year</dt><dd id="year">—</dd></div>
+          <div><dt>Mobile number</dt><dd id="mobile-number">—</dd></div><div><dt>Registered</dt><dd id="timestamp">—</dd></div>
+        </dl>
+      </article>
+      <article class="card payment-card">
+        <div class="section-heading"><div><p class="eyebrow">PAYMENT DETAILS</p><h2>Payment evidence</h2></div><span id="status-badge" class="status-badge">PENDING</span></div>
+        <p class="readonly-note">Saving updates only the existing UTR and screenshot link for this Pass No.</p>
+        <div id="existing-payment" class="existing-payment" hidden><div><span class="field-label">Saved UTR</span><strong id="saved-utr">—</strong></div><a id="screenshot-link" href="#" target="_blank" rel="noopener">View screenshot ↗</a></div>
+        <form id="payment-form">
+          <label for="utr-number">UTR number <span class="required">Required</span></label>
+          <input id="utr-number" name="utrNumber" maxlength="100" placeholder="Enter payment UTR" required>
+          <label for="screenshot">Payment screenshot <span class="required">Required for each save</span></label>
+          <div class="file-control"><input id="screenshot" name="screenshot" type="file" accept="image/jpeg,image/png,image/webp" required><p>JPEG, PNG or WebP · up to <span id="max-size">5</span> MB</p></div>
+          <button id="save-button" class="button-primary" type="submit">Save payment details</button>
+        </form>
+        <div id="verify-box" class="verify-box" hidden><p>Check the UTR and screenshot before verifying this payment.</p><button id="verify-button" class="button-secondary" type="button">Mark payment as verified</button></div>
+      </article>
+    </section>
+    <footer>Private admin tool · Registration records are retrieved from the event spreadsheet.</footer>
+  </main>
+</body>
+</html>
