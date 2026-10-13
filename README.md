@@ -34,10 +34,20 @@ Enable Google Sheets API for the service-account project and Google Drive API fo
 
 The Drive connection requests the `drive.file` scope and uses Google Picker to authorize the configured folder. The app's Drive upload path is limited to that folder. OAuth tokens are stored locally in `.drive-token.json` with owner-only permissions.
 
+## Render deployment
+
+`render.yaml` defines a free Render Web Service that deploys from GitHub `main`. Create a Blueprint in Render for this repository and supply the secret environment values in the Render dashboard. The service listens on Render's `PORT`, binds to `0.0.0.0`, and exposes `/api/health` for health checks.
+
+Set `APP_BASE_URL` to the service's `https://...onrender.com` URL and `GOOGLE_DRIVE_OAUTH_REDIRECT_URI` to `${APP_BASE_URL}/auth/google/callback`. Add that exact callback URL to the authorized redirect URIs of the Google OAuth web client before connecting Drive. After the first authorized Drive connection, the callback displays the refresh token once; copy it directly into Render's `GOOGLE_DRIVE_REFRESH_TOKEN` environment setting and redeploy. This is needed because Render Free has ephemeral disk storage.
+
+Render will prompt for `ADMIN_USERNAME` and `ADMIN_PASSWORD` through HTTP Basic authentication. Share these credentials only with the two admins. Do not commit `.env`, OAuth tokens, service-account keys, or Render secrets.
+
+The Sheets integration reads records for lookup. It writes only when an admin submits the app's payment form, which uploads the selected screenshot to the configured Drive folder and then saves the entered UTR and resulting Drive link. The agent does not write to the spreadsheet.
+
 Keep `.env` and `.drive-token.json` private. They are excluded by `.gitignore`; do not commit credentials or payment screenshots.
 
 ## Data behavior
 
 The server reads spreadsheet data for lookups. It writes only when an admin submits the UTR and screenshot form, and only to the existing UTR and screenshot-link cells on the matching row. It never edits Pass Nos or other registration fields. Google Drive uploads are made by the app on that same form submission; the agent does not submit payments or alter Drive files.
 
-The server binds to `127.0.0.1` by default, so it is local-only. Public hosting requires a backend host, secure secrets, and authentication for administrators. GitHub Pages alone cannot run this backend.
+The server binds to `0.0.0.0` for hosting. GitHub Pages alone cannot run this backend.

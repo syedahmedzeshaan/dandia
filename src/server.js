@@ -22,10 +22,38 @@ function loadConfig() {
     folderId: process.env.GOOGLE_DRIVE_FOLDER_ID.trim(),
     driveClientId: (process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID || '').trim(),
     driveClientSecret: (process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET || '').trim(),
+    driveRefreshToken: (process.env.GOOGLE_DRIVE_REFRESH_TOKEN || '').trim(),
+    appBaseUrl: (process.env.APP_BASE_URL || '').trim().replace(/\/$/, ''),
+    adminUsername: process.env.ADMIN_USERNAME || '',
+    adminPassword: process.env.ADMIN_PASSWORD || '',
     driveTokenPath: process.env.GOOGLE_DRIVE_TOKEN_PATH || path.join(__dirname, '..', '.drive-token.json'),
     maxBytes: size * 1024 * 1024,
     port: Number(process.env.PORT || 3000)
   };
+}
+function protectAdminRoutes(req, res, next) {
+  if (req.path === '/api/health') return next();
+  if (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD) {
+    if (process.env.NODE_ENV !== 'production') return next();
+    return res.status(503).send('Admin access is not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD.');
+  }
+  const header = req.headers.authorization || '';
+  const [scheme, encoded] = header.split(' ');
+  if (scheme === 'Basic' && encoded) {
+    let supplied = '';
+    try { supplied = Buffer.from(encoded, 'base64').toString('utf8'); } catch (_error) {}
+    const separator = supplied.indexOf(':');
+    const username = separator < 0 ? '' : supplied.slice(0, separator);
+    const password = separator < 0 ? '' : supplied.slice(separator + 1);
+    const equal = (a, b) => {
+      const left = Buffer.from(a);
+      const right = Buffer.from(b);
+      return left.length === right.length && crypto.timingSafeEqual(left, right);
+    };
+    if (equal(username, process.env.ADMIN_USERNAME) && equal(password, process.env.ADMIN_PASSWORD)) return next();
+  }
+  res.set('WWW-Authenticate', 'Basic realm="Dandiya Admin", charset="UTF-8"');
+  return res.status(401).send('Sign in with the Dandiya admin credentials.');
 }
 function identifyImage(buffer) {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return { mimeType: 'image/jpeg', extension: 'jpg' };
@@ -45,19 +73,21 @@ async function start() {
     // Keep the interface viewable before Google Sheets settings are supplied.
     const preview = express();
     preview.disable('x-powered-by');
+    preview.use(protectAdminRoutes);
     preview.use(express.static(path.join(__dirname, '..', 'public')));
     preview.get('/api/*', (_req, res) => res.status(503).json({ success: false, message: 'Google Sheets is not configured yet. Add its required values to .env and restart the server.' }));
     preview.get('*', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
     const port = Number(process.env.PORT || 3000);
-    preview.listen(port, '127.0.0.1', () => console.log(`MVSREC Dandiya interface preview at http://127.0.0.1:${port} (Google configuration required for live data)`));
+    preview.listen(port, '0.0.0.0', () => console.log(`MVSREC Dandiya interface preview listening on port ${port} (Google configuration required for live data)`));
     return;
   }
   const sheets = new GoogleSheetsStore(config);
   const driveOAuthReady = Boolean(config.driveClientId && config.driveClientSecret);
-  const driveRedirectUri = `http://localhost:${config.port}/auth/google/callback`;
+  const driveRedirectUri = process.env.GOOGLE_DRIVE_OAUTH_REDIRECT_URI || (config.appBaseUrl ? `${config.appBaseUrl}/auth/google/callback` : `http://localhost:${config.port}/auth/google/callback`);
   const driveOAuth = driveOAuthReady ? new google.auth.OAuth2(config.driveClientId, config.driveClientSecret, driveRedirectUri) : null;
   let driveTokens = null;
-  if (driveOAuthReady && fs.existsSync(config.driveTokenPath)) {
+  if (config.driveRefreshToken) driveTokens = { refresh_token: config.driveRefreshToken };
+  if (!driveTokens && driveOAuthReady && fs.existsSync(config.driveTokenPath)) {
     try { driveTokens = JSON.parse(fs.readFileSync(config.driveTokenPath, 'utf8')); }
     catch (_error) { console.error('Saved Google Drive authorization could not be read; reconnect Drive.'); }
   }
@@ -69,6 +99,7 @@ async function start() {
   const app = express();
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxBytes, files: 1, fields: 2 } });
   app.disable('x-powered-by');
+  app.use(protectAdminRoutes);
   app.use(express.static(path.join(__dirname, '..', 'public'), { fallthrough: true, etag: true }));
   app.get('/auth/google', (_req, res) => {
     if (!driveOAuth) return res.status(503).send('Google Drive OAuth is not configured. Add the OAuth client ID and secret to .env first.');
@@ -99,6 +130,14 @@ async function start() {
       const refreshToken = tokens.refresh_token || driveTokens?.refresh_token;
       if (!refreshToken) return res.status(400).send('Google did not return a refresh token. Revoke this app in your Google Account permissions and try connecting again.');
       driveTokens = { refresh_token: refreshToken, scope: tokens.scope, token_type: tokens.token_type };
+      if (process.env.NODE_ENV === 'production') {
+        // Render's free filesystem is ephemeral. Hand the token to the admin once
+        // so it can be placed in the protected service environment instead.
+        res.type('html').send(`<!doctype html><meta charset="utf-8"><title>Drive connected</title><main style="font:16px system-ui;max-width:760px;margin:10vh auto"><h1>Google Drive authorized</h1><p>Copy this refresh token into Render as <code>GOOGLE_DRIVE_REFRESH_TOKEN</code>, save the environment change, and redeploy. The token is shown only on this authorized callback page.</p><textarea readonly style="width:100%;height:9em">${refreshToken.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))}</textarea><p>After saving it in Render, remove this value from your clipboard.</p></main>`);
+        driveOAuth.setCredentials(driveTokens);
+        drive = config.folderId ? new GoogleDriveStore({ auth: driveOAuth, folderId: config.folderId }) : null;
+        return;
+      }
       fs.writeFileSync(config.driveTokenPath, `${JSON.stringify(driveTokens, null, 2)}\n`, { mode: 0o600 });
       fs.chmodSync(config.driveTokenPath, 0o600);
       driveOAuth.setCredentials(driveTokens);
@@ -163,7 +202,7 @@ async function start() {
     if (status >= 500) console.error('Request failed while communicating with Google APIs.');
     res.status(status).json({ success: false, message: status === 404 || status === 409 || status === 400 ? error.message : 'Unable to complete the request. Check Google API configuration and try again.' });
   });
-  app.listen(config.port, '127.0.0.1', () => console.log(`MVSREC Dandiya admin listening at http://127.0.0.1:${config.port}`));
+  app.listen(config.port, '0.0.0.0', () => console.log(`MVSREC Dandiya admin listening on port ${config.port}`));
 }
 
 start().catch((error) => { console.error(`Startup failed: ${error.message}`); process.exitCode = 1; });

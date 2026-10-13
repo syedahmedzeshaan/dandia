@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: mvsrec-dandiya-admin
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false
+      - key: GOOGLE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_SHEETS_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_SHEETS_WORKSHEET_NAME
+        sync: false
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        sync: false
+      - key: GOOGLE_DRIVE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_DRIVE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_DRIVE_OAUTH_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_DRIVE_REFRESH_TOKEN
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "5"
